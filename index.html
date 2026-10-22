@@ -537,7 +537,7 @@ function interp(keys, u) {
   return keys[keys.length - 1][1];
 }
 // u: 0 = back of heel, 1 = toe tip. s: 0 = sole line, 1 = top centre line.
-const H_KEYS = [[0, .80], [.1, .79], [.3, .63], [.5, .56], [.66, .5], [.8, .41], [.92, .29], [1, .12]];
+const H_KEYS = [[0, .78], [.1, .76], [.28, .6], [.45, .53], [.6, .47], [.72, .4], [.84, .3], [.94, .19], [1, .08]];
 const W_KEYS = [[0, .29], [.15, .33], [.4, .37], [.65, .42], [.8, .41], [.93, .33], [1, .22]];
 const hU = u => interp(H_KEYS, u);
 function wU(u) {
@@ -547,10 +547,11 @@ function wU(u) {
   return w;
 }
 const cU = u => -.05 * smooth(.55, 1, u);              // toe sits slightly toward the medial side (-z)
-const bendY = x => .2 * Math.max(0, (x - .5) / 1) ** 2 + .05 * Math.max(0, (-x - 1.15) / .35) ** 2; // toe spring + heel rocker
+const bendY = x => .1 * Math.max(0, (x - .5) / 1) ** 2 + .05 * Math.max(0, (-x - 1.15) / .35) ** 2; // toe spring + heel rocker
 function upperPoint(u, s, side, out = new THREE.Vector3()) {
   const x = (u - .5) * L, sc = clamp(s, 0, 1);
-  const z = side * wU(u) * Math.cbrt(Math.max(0, 1 - sc ** 3)) * (1 + .05 * Math.sin(Math.PI * sc));
+  const n = 2.2 + .9 * (1 - smooth(.3, .75, u));   // firm heel counter, rounded toe box
+  const z = side * wU(u) * Math.pow(Math.max(0, 1 - sc ** n), 1 / n) * (1 + .04 * Math.sin(Math.PI * sc));
   return out.set(x, hU(u) * sc + bendY(x), z + cU(u));
 }
 function upperNormal(u, s, side) {
@@ -730,7 +731,7 @@ function applyBend(g) {
 
 function buildShoe(tex) {
   const root = new THREE.Group(), shoe = new THREE.Group(); root.add(shoe);
-  const SOLE_T = .32;
+  const SOLE_T = .27;
   const upperMat = new THREE.MeshPhysicalMaterial({ map: tex.upper, bumpMap: tex.bump, bumpScale: 1.2, roughness: .62, clearcoat: .18, clearcoatRoughness: .55, alphaTest: .5, envMapIntensity: .55 });
   const innerMat = new THREE.MeshStandardMaterial({ map: tex.inner, roughness: .9, alphaTest: .5, side: THREE.BackSide, envMapIntensity: .3 });
   const ug = upperGeometry();
@@ -748,18 +749,18 @@ function buildShoe(tex) {
   [sole, heelBlock, base].forEach(m => { m.castShadow = true; m.receiveShadow = true; shoe.add(m); });
 
   // tongue rising out of the collar, with its red star patch
-  const spine = new THREE.CatmullRomCurve3([.68, .56, .44, .34, .27, .22].map((u, i) => {
-    const lift = [-.005, .012, .02, .2, .42, .6][i];
+  const spine = new THREE.CatmullRomCurve3([.68, .56, .44, .36, .3, .26].map((u, i) => {
+    const lift = [-.004, .01, .016, .05, .09, .12][i];
     const p = upperPoint(u, 1, 1); p.y += lift; p.z = cU(u); return p;
   }));
   const tg = new THREE.BufferGeometry(), tp = [], tuv = [], ti = [], NT = 40, NW = 12;
   for (let i = 0; i <= NT; i++) {
     const t = i / NT, c0 = spine.getPoint(t), tan = spine.getTangent(t);
     const nrm = new THREE.Vector3(tan.y, -tan.x, 0).normalize(); if (nrm.y < 0) nrm.negate();
-    const hw = .17 - .045 * smooth(.55, 1, t);
+    const hw = .17 - .03 * smooth(.6, 1, t);
     for (let j = 0; j <= NW; j++) {
       const k = j / NW * 2 - 1, q = c0.clone();
-      q.z += k * hw; q.addScaledVector(nrm, -.06 * k * k);
+      q.z += k * hw; q.addScaledVector(nrm, -.05 * k * k);
       tp.push(q.x, q.y, q.z); tuv.push(t, j / NW);
     }
   }
@@ -768,11 +769,11 @@ function buildShoe(tex) {
   const tongue = new THREE.Mesh(tg, new THREE.MeshPhysicalMaterial({ color: COL.yellow, bumpMap: tex.bump, bumpScale: .8, roughness: .62, clearcoat: .15, side: THREE.DoubleSide, envMapIntensity: .55 }));
   tongue.castShadow = true; shoe.add(tongue);
   {
-    const t = .86, c0 = spine.getPoint(t), T0 = spine.getTangent(t).normalize();
+    const t = .78, c0 = spine.getPoint(t), T0 = spine.getTangent(t).normalize();
     const N0 = new THREE.Vector3(T0.y, -T0.x, 0).normalize(); if (N0.y < 0) N0.negate();
     const Z0 = new THREE.Vector3().crossVectors(T0, N0).normalize();
     const red = new THREE.MeshStandardMaterial({ color: COL.red, roughness: .65 });
-    const patch = new THREE.Mesh(new THREE.BoxGeometry(.2, .014, .15), [red, red, new THREE.MeshPhysicalMaterial({ map: tex.flag, roughness: .6, clearcoat: .2 }), red, red, red]);
+    const patch = new THREE.Mesh(new THREE.BoxGeometry(.17, .012, .13), [red, red, new THREE.MeshPhysicalMaterial({ map: tex.flag, roughness: .6, clearcoat: .2 }), red, red, red]);
     patch.matrixAutoUpdate = false;
     patch.matrix.makeBasis(T0.clone().negate(), N0, Z0.clone().negate()).setPosition(c0.clone().addScaledVector(N0, .012));
     patch.castShadow = true; shoe.add(patch);
@@ -781,7 +782,7 @@ function buildShoe(tex) {
   // laces: five crossing pairs through punched eyelets, tied in tall loops
   const laceMat = new THREE.MeshStandardMaterial({ map: tex.lace, roughness: .92, envMapIntensity: .4 });
   const eyeMat = new THREE.MeshStandardMaterial({ color: '#2b1d14', roughness: .8 });
-  const eyeU = [.4, .455, .51, .565, .62], S_EYE = .86;
+  const eyeU = [.4, .455, .51, .565, .62], S_EYE = .9;
   const E = side => eyeU.map(u => upperPoint(u, S_EYE, side));
   const lat = E(1), med = E(-1);
   const tube = (pts, r = .024) => { const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, r, 7), laceMat); m.castShadow = true; shoe.add(m); };
@@ -792,16 +793,16 @@ function buildShoe(tex) {
       ring.position.copy(p); ring.lookAt(p.clone().add(upperNormal(eyeU[i], S_EYE, k ? -1 : 1))); shoe.add(ring);
     });
   }
-  tube([lat[4], mid(lat[4], med[4], .07), med[4]]);
+  tube([lat[4], mid(lat[4], med[4], .035), med[4]]);
   for (let i = 4; i > 0; i--) {
-    tube([lat[i], mid(lat[i], med[i - 1], .1), med[i - 1]]);
-    tube([med[i], mid(med[i], lat[i - 1], .085), lat[i - 1]]);
+    tube([lat[i], mid(lat[i], med[i - 1], .05), med[i - 1]]);
+    tube([med[i], mid(med[i], lat[i - 1], .042), lat[i - 1]]);
   }
-  const top = mid(lat[0], med[0], .09);
-  tube([lat[0], top, top.clone().add(new THREE.Vector3(-.12, .2, .16)), top.clone().add(new THREE.Vector3(.06, .3, .1)), top.clone().add(new THREE.Vector3(.05, .05, 0))]);
-  tube([med[0], top, top.clone().add(new THREE.Vector3(-.16, .22, -.14)), top.clone().add(new THREE.Vector3(.02, .32, -.1)), top.clone().add(new THREE.Vector3(.04, .04, 0))]);
-  tube([top, top.clone().add(new THREE.Vector3(.1, -.04, .12)), top.clone().add(new THREE.Vector3(.18, -.16, .2))], .022);
-  tube([top, top.clone().add(new THREE.Vector3(.08, -.06, -.1)), top.clone().add(new THREE.Vector3(.2, -.2, -.17))], .022);
+  const top = mid(lat[0], med[0], .05);
+  tube([lat[0], top, top.clone().add(new THREE.Vector3(-.09, .06, .17)), top.clone().add(new THREE.Vector3(.03, .09, .14)), top.clone().add(new THREE.Vector3(.04, .02, .02))]);
+  tube([med[0], top, top.clone().add(new THREE.Vector3(-.09, .06, -.17)), top.clone().add(new THREE.Vector3(.03, .09, -.14)), top.clone().add(new THREE.Vector3(.04, .02, -.02))]);
+  tube([top, top.clone().add(new THREE.Vector3(.08, -.02, .14)), top.clone().add(new THREE.Vector3(.14, -.1, .24))], .02);
+  tube([top, top.clone().add(new THREE.Vector3(.08, -.02, -.14)), top.clone().add(new THREE.Vector3(.15, -.1, -.24))], .02);
 
   // the red dragon character on the heel, projected onto the curved counter
   upper.updateMatrixWorld();
@@ -822,7 +823,7 @@ function buildShoe(tex) {
     yellow: { p: upperPoint(.84, .7, 1), n: upperNormal(.84, .7, 1) },
     red: { p: upperPoint(.44, .5, 1), n: upperNormal(.44, .5, 1) },
     sole: { p: new THREE.Vector3(.2, -.14, .47), n: new THREE.Vector3(0, 0, 1) },
-    laces: { p: mid(lat[2], med[2], .09), n: new THREE.Vector3(0, 1, 0) },
+    laces: { p: mid(lat[2], med[2], .05), n: new THREE.Vector3(0, 1, 0) },
     heel: { p: upperPoint(0, .62, 1).add(new THREE.Vector3(-.02, 0, 0)), n: new THREE.Vector3(-1, 0, 0) },
     craft: { p: upperPoint(.17, .6, -1), n: upperNormal(.17, .6, -1) },
   };
