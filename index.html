@@ -537,8 +537,8 @@ function interp(keys, u) {
   return keys[keys.length - 1][1];
 }
 // u: 0 = back of heel, 1 = toe tip. s: 0 = sole line, 1 = top centre line.
-const H_KEYS = [[0, .78], [.1, .76], [.28, .6], [.45, .53], [.6, .47], [.72, .4], [.84, .3], [.94, .19], [1, .08]];
-const W_KEYS = [[0, .29], [.15, .33], [.4, .37], [.65, .42], [.8, .41], [.93, .33], [1, .22]];
+const H_KEYS = [[0, .84], [.1, .8], [.28, .66], [.45, .61], [.62, .54], [.74, .46], [.85, .37], [.94, .27], [1, .14]];
+const W_KEYS = [[0, .31], [.15, .35], [.4, .4], [.65, .46], [.8, .45], [.93, .37], [1, .25]];
 const hU = u => interp(H_KEYS, u);
 function wU(u) {
   let w = interp(W_KEYS, u);
@@ -550,7 +550,7 @@ const cU = u => -.05 * smooth(.55, 1, u);              // toe sits slightly towa
 const bendY = x => .1 * Math.max(0, (x - .5) / 1) ** 2 + .05 * Math.max(0, (-x - 1.15) / .35) ** 2; // toe spring + heel rocker
 function upperPoint(u, s, side, out = new THREE.Vector3()) {
   const x = (u - .5) * L, sc = clamp(s, 0, 1);
-  const n = 2.2 + .9 * (1 - smooth(.3, .75, u));   // firm heel counter, rounded toe box
+  const n = 3.4 - 1.0 * smooth(.62, 1, u);   // straight card walls, rounded toe tip
   const z = side * wU(u) * Math.pow(Math.max(0, 1 - sc ** n), 1 / n) * (1 + .04 * Math.sin(Math.PI * sc));
   return out.set(x, hU(u) * sc + bendY(x), z + cU(u));
 }
@@ -574,10 +574,10 @@ function paintSide(ctx, lateral, P) {
   const side = fn => { ctx.save(); if (lateral) ctx.scale(ctx.canvas.width, ctx.canvas.height / 2); else { ctx.translate(0, ctx.canvas.height); ctx.scale(ctx.canvas.width, -ctx.canvas.height / 2); } fn(); ctx.restore(); };
   side(() => {
     // red heel panel with curved front edge
-    ctx.beginPath(); ctx.moveTo(-.01, -.02); ctx.lineTo(.265, -.02); ctx.bezierCurveTo(.285, .3, .3, .55, .31, .74); ctx.lineTo(.31, 1.03); ctx.lineTo(-.01, 1.03); ctx.closePath();
+    ctx.beginPath(); ctx.moveTo(-.01, -.02); ctx.lineTo(.2, -.02); ctx.bezierCurveTo(.23, .3, .27, .55, .29, .74); ctx.lineTo(.29, 1.03); ctx.lineTo(-.01, 1.03); ctx.closePath();
     ctx.fillStyle = P.red; ctx.fill(); strokePx(ctx, 4, P.edge, .8);
     // red pinstripe that echoes the heel curve
-    ctx.beginPath(); ctx.moveTo(.29, .0); ctx.bezierCurveTo(.31, .3, .325, .5, .335, .72); strokePx(ctx, 6, P.red);
+    ctx.beginPath(); ctx.moveTo(.225, .0); ctx.bezierCurveTo(.255, .3, .29, .5, .31, .72); strokePx(ctx, 6, P.red);
     // eyestay band
     ctx.beginPath(); ctx.moveTo(.29, .72); ctx.lineTo(.64, .72); ctx.lineTo(.665, .955); ctx.lineTo(.29, .955); ctx.closePath();
     ctx.fillStyle = P.red; ctx.fill(); strokePx(ctx, 3, P.edge, .7);
@@ -595,12 +595,13 @@ function paintSide(ctx, lateral, P) {
     if (lateral) {
       // the red dragon tail: strap from the heel, flame head with three points, hooked tip toward the toe
       ctx.beginPath();
-      ctx.moveTo(.075, .56); ctx.bezierCurveTo(.18, .5, .28, .34, .37, .27);
-      ctx.lineTo(.352, .6); ctx.lineTo(.405, .37); ctx.lineTo(.41, .7); ctx.lineTo(.452, .4); ctx.lineTo(.475, .64); ctx.lineTo(.497, .37);
-      ctx.bezierCurveTo(.545, .3, .575, .16, .57, .055);
-      ctx.bezierCurveTo(.535, .12, .48, .165, .42, .19);
-      ctx.bezierCurveTo(.33, .23, .2, .36, .07, .49); ctx.closePath();
-      ctx.fillStyle = P.red; ctx.fill(); strokePx(ctx, 3, P.edge, .9);
+      ctx.moveTo(.095, .56); ctx.bezierCurveTo(.17, .4, .24, .17, .33, .14);
+      ctx.bezierCurveTo(.38, .13, .41, .16, .43, .22);
+      ctx.lineTo(.44, .66); ctx.lineTo(.468, .38); ctx.lineTo(.49, .58); ctx.lineTo(.505, .33);
+      ctx.bezierCurveTo(.53, .28, .55, .2, .558, .12);
+      ctx.bezierCurveTo(.53, .08, .47, .06, .38, .05);
+      ctx.bezierCurveTo(.27, .04, .17, .25, .085, .47); ctx.closePath();
+      ctx.fillStyle = P.red; ctx.fill(); strokePx(ctx, 6, P.edge, .95); strokePx(ctx, 2, '#F4B0A8', .55);
     }
   });
 }
@@ -703,7 +704,7 @@ function upperGeometry(NU = 180, NV = 128) {
 }
 function soleShape(grow = 0, uMax = 1.0) {
   const pts = [], N = 140, ext = .045 + grow;
-  const wS = u => interp([[0, .31], [.15, .36], [.45, .4], [.7, .46], [.85, .45], [1, .38]], u) + grow;
+  const wS = u => interp([[0, .33], [.15, .38], [.45, .43], [.7, .5], [.85, .49], [1, .42]], u) + grow;
   const at = (t, side) => {           // t in [0,1] over the extended length
     const x = -L / 2 - ext + t * (L + 2 * ext), u = clamp((x + L / 2) / L, 0, 1);
     let w = wS(u);
@@ -749,8 +750,8 @@ function buildShoe(tex) {
   [sole, heelBlock, base].forEach(m => { m.castShadow = true; m.receiveShadow = true; shoe.add(m); });
 
   // tongue rising out of the collar, with its red star patch
-  const spine = new THREE.CatmullRomCurve3([.68, .56, .44, .36, .3, .26].map((u, i) => {
-    const lift = [-.004, .01, .016, .05, .09, .12][i];
+  const spine = new THREE.CatmullRomCurve3([.68, .56, .44, .35, .28, .23].map((u, i) => {
+    const lift = [-.004, .01, .02, .1, .2, .3][i];
     const p = upperPoint(u, 1, 1); p.y += lift; p.z = cU(u); return p;
   }));
   const tg = new THREE.BufferGeometry(), tp = [], tuv = [], ti = [], NT = 40, NW = 12;
@@ -806,7 +807,7 @@ function buildShoe(tex) {
 
   // the red dragon character on the heel, projected onto the curved counter
   upper.updateMatrixWorld();
-  const dg = new DecalGeometry(upper, upperPoint(0, .62, 1), new THREE.Euler(0, -Math.PI / 2, 0), new THREE.Vector3(.34, .34, .6));
+  const dg = new DecalGeometry(upper, upperPoint(0, .62, 1), new THREE.Euler(0, -Math.PI / 2, 0), new THREE.Vector3(.44, .44, .6));
   const dragon = new THREE.Mesh(dg, new THREE.MeshStandardMaterial({ map: tex.dragon, transparent: true, roughness: .55, polygonOffset: true, polygonOffsetFactor: -4, depthWrite: false }));
   shoe.add(dragon);
 
@@ -821,7 +822,7 @@ function buildShoe(tex) {
   // anchors for labels and viewer markers (local to `shoe`)
   const anchors = {
     yellow: { p: upperPoint(.84, .7, 1), n: upperNormal(.84, .7, 1) },
-    red: { p: upperPoint(.44, .5, 1), n: upperNormal(.44, .5, 1) },
+    red: { p: upperPoint(.47, .35, 1), n: upperNormal(.47, .35, 1) },
     sole: { p: new THREE.Vector3(.2, -.14, .47), n: new THREE.Vector3(0, 0, 1) },
     laces: { p: mid(lat[2], med[2], .05), n: new THREE.Vector3(0, 1, 0) },
     heel: { p: upperPoint(0, .62, 1).add(new THREE.Vector3(-.02, 0, 0)), n: new THREE.Vector3(-1, 0, 0) },
