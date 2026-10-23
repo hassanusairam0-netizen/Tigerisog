@@ -590,18 +590,20 @@ function paintSide(ctx, lateral, P) {
     ctx.fillStyle = P.yellow; ctx.fillRect(.55, -.02, .47, .035);
     ctx.beginPath(); ctx.moveTo(.62, .065); ctx.lineTo(1.01, .065); strokePx(ctx, 2, P.edge, .6);
     // grey-white heel counter, pointing forward
-    ctx.beginPath(); ctx.moveTo(-.01, .26); ctx.lineTo(-.01, 1.03); ctx.lineTo(.06, 1.03); ctx.lineTo(.118, .58); ctx.lineTo(.06, .26); ctx.closePath();
+    ctx.beginPath(); ctx.moveTo(-.01, .24); ctx.lineTo(-.01, 1.03); ctx.lineTo(.085, 1.03); ctx.lineTo(.15, .56); ctx.lineTo(.085, .24); ctx.closePath();
     ctx.fillStyle = P.grey; ctx.fill(); strokePx(ctx, 4, P.edge, .75);
     if (lateral) {
       // the red dragon tail: strap from the heel, flame head with three points, hooked tip toward the toe
       ctx.beginPath();
-      ctx.moveTo(.095, .56); ctx.bezierCurveTo(.17, .4, .24, .17, .33, .14);
-      ctx.bezierCurveTo(.38, .13, .41, .16, .43, .22);
-      ctx.lineTo(.44, .66); ctx.lineTo(.468, .38); ctx.lineTo(.49, .58); ctx.lineTo(.505, .33);
-      ctx.bezierCurveTo(.53, .28, .55, .2, .558, .12);
-      ctx.bezierCurveTo(.53, .08, .47, .06, .38, .05);
-      ctx.bezierCurveTo(.27, .04, .17, .25, .085, .47); ctx.closePath();
-      ctx.fillStyle = P.red; ctx.fill(); strokePx(ctx, 6, P.edge, .95); strokePx(ctx, 2, '#F4B0A8', .55);
+      ctx.moveTo(.1, .58); ctx.bezierCurveTo(.17, .41, .24, .18, .33, .14);
+      ctx.bezierCurveTo(.37, .13, .4, .14, .415, .18);
+      ctx.bezierCurveTo(.435, .32, .425, .56, .4, .82);
+      ctx.bezierCurveTo(.44, .62, .462, .5, .478, .42);
+      ctx.lineTo(.5, .63); ctx.lineTo(.515, .38);
+      ctx.bezierCurveTo(.54, .3, .556, .18, .562, .07);
+      ctx.bezierCurveTo(.53, .055, .47, .045, .38, .045);
+      ctx.bezierCurveTo(.27, .04, .17, .26, .088, .48); ctx.closePath();
+      ctx.fillStyle = P.tail || P.red; ctx.fill(); strokePx(ctx, 9, P.edge, .95); strokePx(ctx, 2, '#F4B0A8', .55);
     }
   });
 }
@@ -641,7 +643,7 @@ function makeTextures(aniso) {
   // bump map
   const b = canvas(1024, 512), bx = b.getContext('2d');
   bx.fillStyle = '#7a7a7a'; bx.fillRect(0, 0, 1024, 512);
-  const BP = { yellow: '#7a7a7a', yellowShade: '#6c6c6c', red: '#8c8c8c', grey: '#888', edge: '#4a4a4a' };
+  const BP = { yellow: '#7a7a7a', yellowShade: '#6c6c6c', red: '#8c8c8c', grey: '#888', edge: '#3a3a3a', tail: '#b4b4b4' };
   paintSide(bx, true, BP); paintSide(bx, false, BP);
   for (let i = 0; i < 1024; i += 3.5) { bx.globalAlpha = .25; bx.fillStyle = (i / 3.5) % 2 < 1 ? '#5a5a5a' : '#9a9a9a'; bx.fillRect(i, 0, 1.5, 512); }
   bx.globalAlpha = 1; brushNoise(bx, 1200, .5, false);
@@ -723,6 +725,17 @@ function soleGeometry(shape, depth, bevel) {
   g.rotateX(-Math.PI / 2); g.translate(0, -depth, 0);
   return g;
 }
+function archSole(g, depth, full = false) {
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), u = (x + L / 2) / L;
+    const a = smooth(.22, .42, u) * (1 - smooth(.6, .82, u));
+    const m = clamp(-(z - cU(u)) / .38, 0, 1);
+    const b = full ? 1 : clamp(-y / depth, 0, 1);
+    p.setY(i, y + .085 * a * m * b);
+  }
+  return g;
+}
 function applyBend(g) {
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) p.setY(i, p.getY(i) + bendY(p.getX(i)));
@@ -732,7 +745,7 @@ function applyBend(g) {
 
 function buildShoe(tex) {
   const root = new THREE.Group(), shoe = new THREE.Group(); root.add(shoe);
-  const SOLE_T = .27;
+  const SOLE_T = .3;
   const upperMat = new THREE.MeshPhysicalMaterial({ map: tex.upper, bumpMap: tex.bump, bumpScale: 1.2, roughness: .62, clearcoat: .18, clearcoatRoughness: .55, alphaTest: .5, envMapIntensity: .55 });
   const innerMat = new THREE.MeshStandardMaterial({ map: tex.inner, roughness: .9, alphaTest: .5, side: THREE.BackSide, envMapIntensity: .3 });
   const ug = upperGeometry();
@@ -742,10 +755,10 @@ function buildShoe(tex) {
 
   // sole: main slab, a separate wrapped heel block, and the raw card layer underneath
   const soleMat = new THREE.MeshPhysicalMaterial({ color: '#ffffff', map: tex.sole, roughness: .78, clearcoat: .08, envMapIntensity: .5 });
-  const sole = new THREE.Mesh(applyBend(soleGeometry(soleShape(0), SOLE_T - .03, .025)), soleMat);
+  const sole = new THREE.Mesh(applyBend(archSole(soleGeometry(soleShape(0), SOLE_T - .03, .025), SOLE_T - .03)), soleMat);
   const heelBlock = new THREE.Mesh(applyBend(soleGeometry(soleShape(.014, .235), SOLE_T - .03, .025)), soleMat);
   heelBlock.position.y = .006;
-  const base = new THREE.Mesh(applyBend(soleGeometry(soleShape(-.01), .025, 0)), new THREE.MeshStandardMaterial({ color: COL.card, roughness: .95 }));
+  const base = new THREE.Mesh(applyBend(archSole(soleGeometry(soleShape(-.01), .025, 0), .025, true)), new THREE.MeshStandardMaterial({ color: COL.card, roughness: .95 }));
   base.position.y = -(SOLE_T - .03) - .02;
   [sole, heelBlock, base].forEach(m => { m.castShadow = true; m.receiveShadow = true; shoe.add(m); });
 
@@ -786,7 +799,7 @@ function buildShoe(tex) {
   const eyeU = [.4, .455, .51, .565, .62], S_EYE = .9;
   const E = side => eyeU.map(u => upperPoint(u, S_EYE, side));
   const lat = E(1), med = E(-1);
-  const tube = (pts, r = .024) => { const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, r, 7), laceMat); m.castShadow = true; shoe.add(m); };
+  const tube = (pts, r = .029) => { const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, r, 7), laceMat); m.castShadow = true; shoe.add(m); };
   const mid = (a, b, lift) => a.clone().add(b).multiplyScalar(.5).add(new THREE.Vector3(0, lift, 0));
   for (let i = 0; i < 5; i++) {
     [lat[i], med[i]].forEach((p, k) => {
@@ -794,10 +807,10 @@ function buildShoe(tex) {
       ring.position.copy(p); ring.lookAt(p.clone().add(upperNormal(eyeU[i], S_EYE, k ? -1 : 1))); shoe.add(ring);
     });
   }
-  tube([lat[4], mid(lat[4], med[4], .035), med[4]]);
+  tube([lat[4], mid(lat[4], med[4], .055), med[4]]);
   for (let i = 4; i > 0; i--) {
-    tube([lat[i], mid(lat[i], med[i - 1], .05), med[i - 1]]);
-    tube([med[i], mid(med[i], lat[i - 1], .042), lat[i - 1]]);
+    tube([lat[i], mid(lat[i], med[i - 1], .08), med[i - 1]]);
+    tube([med[i], mid(med[i], lat[i - 1], .07), lat[i - 1]]);
   }
   const top = mid(lat[0], med[0], .05);
   tube([lat[0], top, top.clone().add(new THREE.Vector3(-.09, .06, .17)), top.clone().add(new THREE.Vector3(.03, .09, .14)), top.clone().add(new THREE.Vector3(.04, .02, .02))]);
@@ -846,7 +859,7 @@ let gl = null;
 try { const c = document.createElement('canvas'); gl = c.getContext('webgl2') || c.getContext('webgl'); } catch (e) { gl = null; }
 if (!gl) document.documentElement.classList.add('no-gl');
 
-const pose = { rx: .22, ry: -.55, rz: 0, px: 1.2, py: -.1, s: 1.1, vis: 1, ink: 0, env: 0, fin: 0, mtn: 1, cloud: 1 };
+const pose = { rx: .22, ry: -.55, rz: 0, px: 1.2, py: -.1, s: 1.28, vis: 1, ink: 0, env: 0, fin: 0, mtn: 1, cloud: 1 };
 const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
 let stage = null, viewer = null;
 
@@ -930,7 +943,7 @@ function applyBg() {
 }
 
 /* ================= master scroll timeline ================= */
-const HERO = { rx: .22, ry: -.55, rz: 0, px: 1.2, py: -.1, s: 1.1, vis: 1, ink: 0, env: 0, fin: 0, mtn: 1, cloud: 1 };
+const HERO = { rx: .22, ry: -.55, rz: 0, px: 1.2, py: -.1, s: 1.28, vis: 1, ink: 0, env: 0, fin: 0, mtn: 1, cloud: 1 };
 const STEPS = [
   { rx: .26, ry: -1.0, px: 1.1, py: -.1, s: 1.25 },     // yellow upper, toe three-quarter
   { rx: .1, ry: -.1, px: 1.05, py: -.05, s: 1.2 },          // red side design, lateral profile
@@ -954,12 +967,12 @@ function buildMaster() {
   keys.push(
     [A('#speed', -.2), { rx: .06, ry: 6.28, rz: -.04, px: -1.4, py: -.6, s: .95, ink: 1, mtn: 0, cloud: .2 }],
     [P('#speed', 1), { rx: .06, ry: 6.28, rz: -.09, px: 1.5, py: -.6, s: .95, ink: 1 }],
-    [A('#envs', -.05), { rx: .2, ry: 5.73, rz: 0, px: 1.1, py: -.1, s: 1.15, ink: 0, env: 1, cloud: 0 }],
-    [P('#envs', 1), { rx: .2, ry: 5.73, px: 1.1, py: -.1, s: 1.15, env: 1 }],
+    [A('#envs', -.05), { rx: .2, ry: 5.73, rz: 0, px: 1.1, py: -.1, s: 1.3, ink: 0, env: 1, cloud: 0 }],
+    [P('#envs', 1), { rx: .2, ry: 5.73, px: 1.1, py: -.1, s: 1.3, env: 1 }],
     [A('#viewer', -.35), { vis: 0, s: 1.1, env: 0, mtn: .6, cloud: .8 }],
     [A('#finale', -.6), { vis: 0, rx: .1, ry: 4.6, px: 0, py: -1.4, s: 1.0, mtn: .6, cloud: .8, fin: 0 }],
-    [P('#finale', .55), { vis: 1, rx: .2, ry: 5.66, px: 0, py: -.42, s: 1.12, fin: 1, mtn: .25, cloud: .4 }],
-    [P('#finale', 1), { vis: 1, rx: .22, ry: 5.72, px: 0, py: -.42, s: 1.16, fin: 1 }],
+    [P('#finale', .55), { vis: 1, rx: .2, ry: 5.66, px: 0, py: -.42, s: 1.3, fin: 1, mtn: .25, cloud: .4 }],
+    [P('#finale', 1), { vis: 1, rx: .22, ry: 5.72, px: 0, py: -.42, s: 1.34, fin: 1 }],
   );
   // fill missing props from the previous key so every tween is complete
   let prev = { ...HERO };
@@ -1069,7 +1082,7 @@ const HOTS = [
   { k: 'heel', t: 'The heel', d: 'Grey-white counter with 龍 (dragon) in red over a red band.' },
   { k: 'craft', t: 'Craftsmanship', d: 'The inner side shows the hand-cut collar and the raw card lining, kept in the model on purpose.' },
 ];
-const VIEWS = { reset: [3.9, 2.3, 6.4], lateral: [0, .9, 7.6], medial: [0, .9, -7.6], front: [7.4, 1.4, .6], heel: [-7.4, 1.4, -.4], top: [.01, 7.6, .6] };
+const VIEWS = { reset: [3.0, 1.75, 4.9], lateral: [0, .7, 5.9], medial: [0, .7, -5.9], front: [5.7, 1.1, .5], heel: [-5.7, 1.1, -.3], top: [.01, 5.9, .5] };
 if (stage) {
   const host = $('#vStage');
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -1084,7 +1097,7 @@ if (stage) {
   const camera = new THREE.PerspectiveCamera(32, 1, .1, 100); camera.position.set(...VIEWS.reset);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, .05, 0); controls.enableDamping = true; controls.dampingFactor = .08; controls.enablePan = false;
-  controls.minDistance = 3.6; controls.maxDistance = 12; controls.minPolarAngle = .05; controls.maxPolarAngle = 1.72; controls.rotateSpeed = .8;
+  controls.minDistance = 2.6; controls.maxDistance = 12; controls.minPolarAngle = .05; controls.maxPolarAngle = 1.72; controls.rotateSpeed = .8;
   controls.update();
   const hotEls = HOTS.map((h, i) => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'hot'; b.textContent = i + 1;
