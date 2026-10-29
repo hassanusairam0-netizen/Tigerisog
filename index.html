@@ -550,9 +550,10 @@ const cU = u => -.05 * smooth(.55, 1, u);              // toe sits slightly towa
 const bendY = x => .1 * Math.max(0, (x - .5) / 1) ** 2 + .05 * Math.max(0, (-x - 1.15) / .35) ** 2; // toe spring + heel rocker
 function upperPoint(u, s, side, out = new THREE.Vector3()) {
   const x = (u - .5) * L, sc = clamp(s, 0, 1);
+  const tip = u > .9 ? .3 + .7 * Math.sqrt(Math.max(0, 1 - ((u - .9) / .1) ** 2)) : 1;
   const n = 3.4 - 1.0 * smooth(.62, 1, u);   // straight card walls, rounded toe tip
   const z = side * wU(u) * Math.pow(Math.max(0, 1 - sc ** n), 1 / n) * (1 + .04 * Math.sin(Math.PI * sc));
-  return out.set(x, hU(u) * sc + bendY(x), z + cU(u));
+  return out.set(x, hU(u) * tip * sc + bendY(x), z + cU(u));
 }
 function upperNormal(u, s, side) {
   const e = .004, p = upperPoint(u, s, side);
@@ -636,10 +637,12 @@ function makeTextures(aniso) {
   paintSide(x, true, COL); paintSide(x, false, COL);
   // card flutes: faint vertical ridges, the way the photos show them
   x.save(); x.globalCompositeOperation = 'soft-light';
-  for (let i = 0; i < W; i += 7) { x.globalAlpha = .08 + Math.random() * .06; x.fillStyle = i % 14 ? '#000' : '#fff'; x.fillRect(i, 0, 2, H); }
+  for (let i = 0; i < W; i += 7) { x.globalAlpha = .035 + Math.random() * .03; x.fillStyle = i % 14 ? '#000' : '#fff'; x.fillRect(i, 0, 2, H); }
   x.restore();
-  brushNoise(x, 2600, .35, false);
-  cutCollar(x);
+  brushNoise(x, 700, .16, false);
+  x.save(); x.globalCompositeOperation = 'multiply';
+  for (const [y0, y1] of [[0, H * .05], [H, H * .95]]) { const g = x.createLinearGradient(0, y0, 0, y1); g.addColorStop(0, 'rgba(90,60,40,.45)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, Math.min(y0, y1), W, H * .05); }
+  x.restore();
   // bump map
   const b = canvas(1024, 512), bx = b.getContext('2d');
   bx.fillStyle = '#7a7a7a'; bx.fillRect(0, 0, 1024, 512);
@@ -651,7 +654,7 @@ function makeTextures(aniso) {
   const n = canvas(1024, 512), nx = n.getContext('2d');
   nx.fillStyle = COL.card; nx.fillRect(0, 0, 1024, 512);
   for (let i = 0; i < 1024; i += 4) { nx.globalAlpha = .12; nx.fillStyle = i % 8 ? '#5b4526' : '#d6bf8a'; nx.fillRect(i, 0, 2, 512); }
-  nx.globalAlpha = 1; cutCollar(nx);
+  nx.globalAlpha = 1;
   // sole: white paint over card flutes
   const s = canvas(1024, 256), sx = s.getContext('2d');
   sx.fillStyle = COL.white; sx.fillRect(0, 0, 1024, 256);
@@ -685,17 +688,20 @@ function makeTextures(aniso) {
   return tex;
 }
 
-function upperGeometry(NU = 180, NV = 128) {
-  const pos = [], uv = [], idx = [], p = new THREE.Vector3();
+function upperGeometry(NU = 220, NV = 128) {
+  const pos = [], uv = [], idx = [], p = new THREE.Vector3(), cut = new Uint8Array((NU + 1) * (NV + 1));
   for (let i = 0; i <= NU; i++) {
     const u = i / NU;
     for (let j = 0; j <= NV; j++) {
-      const v = j / NV, s = v < .5 ? v * 2 : (1 - v) * 2, side = v < .5 ? 1 : -1;
-      upperPoint(u, s, side, p); pos.push(p.x, p.y, p.z); uv.push(u, v);
+      const v = j / NV, side = v < .5 ? 1 : -1, cs = collarS(u);
+      let s = v < .5 ? v * 2 : (1 - v) * 2;
+      if (s > cs) { s = cs; cut[i * (NV + 1) + j] = 1; }
+      upperPoint(u, s, side, p); pos.push(p.x, p.y, p.z); uv.push(u, side > 0 ? s / 2 : 1 - s / 2);
     }
   }
   for (let i = 0; i < NU; i++) for (let j = 0; j < NV; j++) {
     const a = i * (NV + 1) + j, b = a + NV + 1, c2 = a + 1, d = b + 1;
+    if (j === NV / 2 - 1 && (cut[c2] || cut[d])) continue;   // leave the foot opening open
     idx.push(a, b, c2, b, d, c2);
   }
   const g = new THREE.BufferGeometry();
@@ -746,12 +752,20 @@ function applyBend(g) {
 function buildShoe(tex) {
   const root = new THREE.Group(), shoe = new THREE.Group(); root.add(shoe);
   const SOLE_T = .3;
-  const upperMat = new THREE.MeshPhysicalMaterial({ map: tex.upper, bumpMap: tex.bump, bumpScale: 1.2, roughness: .62, clearcoat: .18, clearcoatRoughness: .55, alphaTest: .5, envMapIntensity: .55 });
-  const innerMat = new THREE.MeshStandardMaterial({ map: tex.inner, roughness: .9, alphaTest: .5, side: THREE.BackSide, envMapIntensity: .3 });
+  const upperMat = new THREE.MeshPhysicalMaterial({ map: tex.upper, bumpMap: tex.bump, bumpScale: 1.2, roughness: .62, clearcoat: .18, clearcoatRoughness: .55, envMapIntensity: .6 });
+  const innerMat = new THREE.MeshStandardMaterial({ map: tex.inner, roughness: .9, side: THREE.BackSide, envMapIntensity: .3 });
   const ug = upperGeometry();
   const upper = new THREE.Mesh(ug, upperMat); upper.castShadow = true; upper.receiveShadow = true; upper.name = 'upper';
   const inner = new THREE.Mesh(ug, innerMat); inner.receiveShadow = true;
   shoe.add(upper, inner);
+
+  // raw card edge along the collar, so the opening has real thickness
+  const rimPts = [];
+  for (let u = .31; u >= .03; u -= .01) rimPts.push(upperPoint(u, Math.min(1, collarS(u)), -1));
+  rimPts.push(upperPoint(.012, 1, 1));
+  for (let u = .03; u <= .31; u += .01) rimPts.push(upperPoint(u, Math.min(1, collarS(u)), 1));
+  const rim = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rimPts), 160, .016, 8), new THREE.MeshStandardMaterial({ color: '#8C6E45', roughness: .95 }));
+  rim.castShadow = true; shoe.add(rim);
 
   // sole: main slab, a separate wrapped heel block, and the raw card layer underneath
   const soleMat = new THREE.MeshPhysicalMaterial({ color: '#ffffff', map: tex.sole, roughness: .78, clearcoat: .08, envMapIntensity: .5 });
@@ -761,6 +775,11 @@ function buildShoe(tex) {
   const base = new THREE.Mesh(applyBend(archSole(soleGeometry(soleShape(-.01), .025, 0), .025, true)), new THREE.MeshStandardMaterial({ color: COL.card, roughness: .95 }));
   base.position.y = -(SOLE_T - .03) - .02;
   [sole, heelBlock, base].forEach(m => { m.castShadow = true; m.receiveShadow = true; shoe.add(m); });
+
+  // card insole inside the foot opening
+  const insoleG = new THREE.ShapeGeometry(soleShape(-.07), 1); insoleG.rotateX(-Math.PI / 2); insoleG.translate(0, .012, 0);
+  const insole = new THREE.Mesh(applyBend(insoleG), new THREE.MeshStandardMaterial({ map: tex.inner, roughness: .95, envMapIntensity: .3 }));
+  insole.receiveShadow = true; shoe.add(insole);
 
   // tongue rising out of the collar, with its red star patch
   const spine = new THREE.CatmullRomCurve3([.68, .56, .44, .35, .28, .23].map((u, i) => {
@@ -794,7 +813,7 @@ function buildShoe(tex) {
   }
 
   // laces: five crossing pairs through punched eyelets, tied in tall loops
-  const laceMat = new THREE.MeshStandardMaterial({ map: tex.lace, roughness: .92, envMapIntensity: .4 });
+  const laceMat = new THREE.MeshPhysicalMaterial({ map: tex.lace, roughness: .9, sheen: 1, sheenColor: new THREE.Color('#ffffff'), sheenRoughness: .6, envMapIntensity: .4 });
   const eyeMat = new THREE.MeshStandardMaterial({ color: '#2b1d14', roughness: .8 });
   const eyeU = [.4, .455, .51, .565, .62], S_EYE = .9;
   const E = side => eyeU.map(u => upperPoint(u, S_EYE, side));
@@ -828,7 +847,7 @@ function buildShoe(tex) {
   const floorY = base.position.y - .005;
   const blob = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.6), new THREE.MeshBasicMaterial({ map: tex.shadow, transparent: true, depthWrite: false }));
   blob.rotation.x = -Math.PI / 2; blob.position.y = floorY - .002; shoe.add(blob);
-  const catcher = new THREE.Mesh(new THREE.PlaneGeometry(9, 6), new THREE.ShadowMaterial({ opacity: .22 }));
+  const catcher = new THREE.Mesh(new THREE.CircleGeometry(4.2, 64), new THREE.ShadowMaterial({ opacity: .12 }));
   catcher.rotation.x = -Math.PI / 2; catcher.position.y = floorY; catcher.receiveShadow = true; shoe.add(catcher);
   shoe.position.y = -.3;
 
@@ -846,8 +865,8 @@ function buildShoe(tex) {
 
 function makeLights(scene) {
   const hemi = new THREE.HemisphereLight('#fffaf0', '#b8a280', .55);
-  const key = new THREE.DirectionalLight('#fff7ec', 2.3); key.position.set(3, 6.5, 5);
-  key.castShadow = true; key.shadow.mapSize.set(1024, 1024); key.shadow.camera.left = -3.5; key.shadow.camera.right = 3.5; key.shadow.camera.top = 3.5; key.shadow.camera.bottom = -3.5; key.shadow.bias = -.0004; key.shadow.radius = 4;
+  const key = new THREE.DirectionalLight('#fff7ec', 2.3); key.position.set(2.5, 9, 3.5);
+  key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.camera.left = -6; key.shadow.camera.right = 6; key.shadow.camera.top = 6; key.shadow.camera.bottom = -6; key.shadow.camera.far = 30; key.shadow.bias = -.0004; key.shadow.radius = 4;
   const rim = new THREE.DirectionalLight('#ffe2bf', 1.2); rim.position.set(-5, 3, -4);
   const fill = new THREE.DirectionalLight('#ffffff', .5); fill.position.set(-3, 1, 5);
   scene.add(hemi, key, rim, fill);
@@ -1045,7 +1064,7 @@ let currentEnv = 0;
 const envTabs = $('#envTabs'), envPanel = $('#envPanel');
 ENVS.forEach((e, i) => {
   const b = document.createElement('button');
-  b.type = 'button'; b.role = 'tab'; b.id = 'envtab' + i; b.setAttribute('aria-controls', 'envPanel');
+  b.type = 'button'; b.setAttribute('role', 'tab'); b.id = 'envtab' + i; b.setAttribute('aria-controls', 'envPanel');
   b.innerHTML = `<span class="han" aria-hidden="true">${e.zh}</span><span class="lbl">${e.key}</span>`;
   b.setAttribute('aria-label', e.key);
   b.addEventListener('click', () => setEnv(i));
@@ -1113,6 +1132,8 @@ if (stage) {
   let visible = false;
   new IntersectionObserver(es => { visible = es[0].isIntersecting; }, { rootMargin: '100px' }).observe(host);
   const tmp = new THREE.Vector3(), nrm = new THREE.Vector3(), toCam = new THREE.Vector3();
+  const ray = new THREE.Raycaster(), solid = [], blocked = HOTS.map(() => false); let frameN = 0;
+  S.shoe.traverse(o => { if (o.isMesh && !(o.material && o.material.isShadowMaterial) && o.material.depthWrite !== false) solid.push(o); });
   let fly = null;
   function goView(name) {
     const to = VIEWS[name]; if (fly) fly.kill();
@@ -1140,12 +1161,19 @@ if (stage) {
     renderer.render(scene, camera);
     const r = host.getBoundingClientRect();
     S.shoe.updateMatrixWorld();
+    const check = frameN++ % 8 === 0;
     HOTS.forEach((h, i) => {
       const a = S.anchors[h.k];
       tmp.copy(a.p).applyMatrix4(S.shoe.matrixWorld);
       nrm.copy(a.n).transformDirection(S.shoe.matrixWorld);
       toCam.copy(camera.position).sub(tmp).normalize();
-      const facing = nrm.dot(toCam) > .05;
+      if (check) {   // hide markers the shoe itself is blocking
+        const dist = camera.position.distanceTo(tmp);
+        ray.set(camera.position, tmp.clone().sub(camera.position).normalize()); ray.far = dist;
+        const hit = ray.intersectObjects(solid, false)[0];
+        blocked[i] = !!hit && hit.distance < dist - .08;
+      }
+      const facing = nrm.dot(toCam) > .05 && !blocked[i];
       tmp.project(camera);
       hotEls[i].style.transform = `translate(${((tmp.x * .5 + .5) * r.width).toFixed(1)}px,${((-tmp.y * .5 + .5) * r.height).toFixed(1)}px)`;
       hotEls[i].classList.toggle('away', !facing);
